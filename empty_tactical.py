@@ -67,6 +67,17 @@ class MyStrategicApi(strategic_api.StrategicApi):
                 if dis <= radius:
                     danger += self.estimate_tile_danger(coor) / float(dis)
         return danger
+    
+    def report_builders(self):
+        builders = {}
+        for piece in self.context.all_pieces:
+            if piece.type == "builder":
+                command = self.context.get_commands_of_piece(piece.id)
+
+                builders[piece] = (command[0] if command else None,
+                                   piece.money
+                                   )
+        return builders
 
 
 def get_strategic_implementation(context):
