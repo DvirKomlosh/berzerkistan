@@ -56,6 +56,8 @@ class MyStrategicApi(strategic_api.StrategicApi):
         curr_money += m
         return curr_money >= amount
 
+log = tactical_api.Logger.log
+
 
 def get_strategic_implementation(context):
     return MyStrategicApi(context)
