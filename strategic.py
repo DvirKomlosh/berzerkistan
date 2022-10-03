@@ -21,11 +21,11 @@ def get_sorted_tiles_for_attack(strategic):
     return enemy_tiles + unclaimed_tiles
 
 
-def builder_decide(builder):
-    if strategic_api.estimate_tile_danger(builder.tile.coordinate.x) > 0:
-        strategic_api.build_piece(builder, "tank")
+def builder_decide(strategic, builder):
+    if strategic.estimate_tile_danger(builder.tile.coordinates) > 0:
+        strategic.build_piece(builder, "tank")
     else:
-        strategic_api.build_piece(builder, "builder")
+        strategic.build_piece(builder, "builder")
 
 
 def do_turn(strategic):
@@ -34,7 +34,7 @@ def do_turn(strategic):
         tanks = strategic.report_attacking_pieces()
         # handle_builders(builders)
         for b in builders.keys():
-            builder_decide(b)
+            builder_decide(strategic, b)
         tiles_for_attack = get_sorted_tiles_for_attack(strategic)
         if len(tiles_for_attack) == 0:
             return
@@ -48,4 +48,4 @@ def do_turn(strategic):
             if tile_index >= len(tiles_for_attack):
                 break
     except Exception as e:
-        strategic.log(e)
+        pass

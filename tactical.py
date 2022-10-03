@@ -80,66 +80,66 @@ class MyStrategicApi(strategic_api.StrategicApi):
         return None
 
     def report_builders(self):
-        log.log("[*] report_builders: enter")
+        self.context.log("[*] report_builders: enter")
         builders = {}
-        for piece in self.context.all_pieces:
+        for piece in self.context.all_pieces.values():
             if piece.type == "builder":
                 command = self.context.get_commands_of_piece(piece.id)
 
                 builders[piece] = (command[0] if command else None, piece.money)
-        log.log("[*] report_builders: return")
+        self.context.log("[*] report_builders: return")
         return builders
 
     def get_power(self, piece) -> float:
-        log.log("[*] get_power: enter")
+        self.context.log("[*] get_power: enter")
         if piece.type == "tank":
-            log.log("[*] get_power: return")
+            self.context.log("[*] get_power: return")
             return 10
         if piece.type == "airplane" or piece.type == "helicopter":
             if piece.flying == True:
-                log.log("[*] get_power: return")
+                self.context.log("[*] get_power: return")
                 return 500 / piece.time_in_air
             else:
-                log.log("[*] get_power: return")
+                self.context.log("[*] get_power: return")
                 return 4
         if piece.type == "antitank":
-            log.log("[*] get_power: return")
+            self.context.log("[*] get_power: return")
             return 100
         if piece.type == "artillery":
-            log.log("[*] get_power: return")
+            self.context.log("[*] get_power: return")
             return 30
         else:
-            log.log("[*] get_power: return")
+            self.context.log("[*] get_power: return")
             return 15
 
     def estimate_tile_danger(self, destination) -> float:
-        log.log("[*] estimate_tile_danger: enter")
+        self.context.log("[*] estimate_tile_danger: enter")
         tile = self.context.tiles[(destination.x, destination.y)]
         if tile.country is None:
-            log.log("[*] estimate_tile_danger: return")
+            self.context.log("[*] estimate_tile_danger: return")
             return 0
         if tile.country == self.get_my_country():
             danger = 0
-            for piece in self.context.all_pieces:
+            for piece in self.context.all_pieces.values():
                 if piece.country == self.get_my_country():
                     if tactical_api.distance(piece.tile.coordinates, destination) == 0:
                         danger = max(danger, self.get_power(piece))
-            log.log("[*] estimate_tile_danger: return")
+            self.context.log("[*] estimate_tile_danger: return")
             return 0 - danger
         else:
             danger = 0
-            for piece in self.context.all_pieces:
+            for piece in self.context.all_pieces.values():
                 if piece.country != self.get_my_country():
                     if tactical_api.distance(piece.tile.coordinates, destination) == 0:
                         danger = max(danger, self.get_power(piece))
             if danger == 0:
                 pass
             else:
-                log.log("[*] estimate_tile_danger: return")
+                self.context.log("[*] estimate_tile_danger: return")
                 return danger
 
     def gather_intelligence(self, pieces, destination, radius=2):
-        log.log("[*] gather_intelligence: enter")
+        self.context.log("[*] gather_intelligence: enter")
         """Get intelligence of the area around the destination, using `pieces`.
         This method should return a command identifier.
         """
@@ -150,11 +150,11 @@ class MyStrategicApi(strategic_api.StrategicApi):
                 dis = tactical_api.distance(coor, destination)
                 if dis <= radius:
                     danger += self.estimate_tile_danger(coor) / float(dis)
-        log.log("[*] gather_intelligence: return")
+        self.context.log("[*] gather_intelligence: return")
         return danger
 
     def move_builder(self, piece, dest):
-        log.log("[*] move_builder: enter")
+        self.context.log("[*] move_builder: enter")
         coor = piece.tile.coordinates
         for i in range(5):
             if dest.x < coor.x:
@@ -179,10 +179,10 @@ class MyStrategicApi(strategic_api.StrategicApi):
             else:
                 break
             piece.move(new_coordinate)
-        log.log("[*] move_builder: return")
+        self.context.log("[*] move_builder: return")
 
     def build_piece(self, builder, piece_type):
-        log.log("[*] build_piece: enter")
+        self.context.log("[*] build_piece: enter")
         if piece_type == "airplane":
             if builder.money >= COST[piece_type]:
                 builder.build_airplane()
@@ -238,14 +238,14 @@ class MyStrategicApi(strategic_api.StrategicApi):
                 builder.build_tower()
             else:
                 self.collect_money(builder, builder.money - COST[piece_type])
-        log.log("[*] build_piece: return")
+        self.context.log("[*] build_piece: return")
 
     def collect_money(self, builder, amount):
         """Collect a certain amount of money by the given `builder`.
         `builder` should be a `StrategicPiece` object. `amount` should be an `int`.
         This method should return a command ID.
         """
-        log.log("[*] collect_money: enter")
+        self.context.log("[*] collect_money: enter")
         curr_money = builder.money
         # pick a direction where there is the most money and go there
         loc = builder.tile.coordinates
@@ -265,7 +265,7 @@ class MyStrategicApi(strategic_api.StrategicApi):
                 n_tile = self.context.tiles[(loc.x, loc.y + 1)]
                 tiles_money["D"] = n_tile.money
             if len(tiles_money) == 0:
-                log.log("[!] collect_money: impossible location")
+                self.context.log("[!] collect_money: impossible location")
             direction, m = sorted(tiles_money.items(), key=lambda d, m: -m)[0]
             dest = common_types.Coordinates(loc.x + 1 * (direction == "R") - 1 * (direction == "L"), loc.y + 1 * (direction == "D") - 1 * (direction == "U"))
             if m == 0:
@@ -276,15 +276,16 @@ class MyStrategicApi(strategic_api.StrategicApi):
                     self.move_builder(builder, coor)
                 else:
                     self.move_builder(builder, common_types.Coordinates(self.get_game_width() // 2, self.get_game_height() // 2))
-                log.log("[*] collect_money: return")
+                self.context.log("[*] collect_money: return")
                 return
             else:
                 builder.move(dest)
-        n_tile = self.context.tiles[(loc.x - 1, loc.y)]
-        m = n_tile.money
-        builder.collect_money(max(m, 5))
-        curr_money += 5
-        log.log("[*] collect_money: return")
+        else:
+            n_tile = self.context.tiles[(loc.x - 1, loc.y)]
+            m = n_tile.money
+            builder.collect_money(min(m, 5))
+            curr_money += 5
+        self.context.log("[*] collect_money: return")
         return curr_money >= amount
 
     def get_game_width(self):
@@ -306,7 +307,7 @@ class MyStrategicApi(strategic_api.StrategicApi):
         return None
 
 
-log = tactical_api.Logger(None)
+# log = tactical_api.Logger(None)
 
 
 def get_strategic_implementation(context):
