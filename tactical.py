@@ -1,5 +1,7 @@
 import imp
 import random
+from typing import Tuple, List
+
 
 import tactical_api
 import strategic_api
@@ -11,6 +13,91 @@ from strategic_api import CommandStatus, StrategicApi, StrategicPiece
 tank_to_coordinate_to_attack = {}
 tank_to_attacking_command = {}
 commands = []
+
+
+class TurnContext(object):
+    """Contains all the context of this turn.
+
+    Some useful fields:
+    * tiles: Maps coordinates (int, int) to a Tile object.
+    * my_pieces: Maps piece IDs to the actual piece, for pieces owned by our
+                 country.
+    * all_pieces: Same as my_pieces, but for all pieces known by this country.
+    * game_width: The width of the game.
+    * game_height: The height of the game.
+    * my_country: The name of my country.
+    * all_countries: The names of all countries in the game.
+    """
+
+    def __init__(self, turn_data, logger):
+        super(TurnContext, self).__init__()
+        self._turn_data = turn_data
+        self._logger = logger
+        self._commands = []
+        self.tiles = {(tile["coordinate"]["x"], tile["coordinate"]["y"]): Tile(self, tile) for tile in turn_data["tiles"]}
+        self.my_pieces = {}
+        self.all_pieces = {}
+        self.game_width = turn_data["width"]
+        self.game_height = turn_data["height"]
+        self.my_country = turn_data["country"]
+        self.all_countries = turn_data["all_countries"]
+        for tile in self.tiles.values():
+            for piece in tile.pieces:
+                if piece.country == self.my_country:
+                    self.my_pieces[piece.id] = piece
+                self.all_pieces[piece.id] = piece
+
+    def get_tiles_of_country(self, country_name):
+        """Returns the set of tile coordinates owned by the given country name.
+
+        If country_name is None, the returned coordinates are of tiles that do not
+        belong to any country.
+        """
+        return {tile.coordinates for tile in self.tiles.values() if tile.country == country_name}
+
+    def get_sighings_of_piece(self, piece_id):
+        """Returns the sightings of the given piece.
+
+        This method returns a set of sighted pieces and their locations, as seen by
+        the given piece.
+
+        Note that the given piece MUST belong to my country in order for this
+        method to work.
+        """
+        piece = self.my_pieces[piece_id]
+        if isinstance(piece, Tower):
+            sighting_distance = constants.TOWER_SIGHTING_RANGE
+        elif isinstance(piece, Satellite):
+            sighting_distance = constants.SATELLITE_SIGHTING_RANGE
+        else:
+            sighting_distance = 1
+        result = set()
+        piece_coordinates = piece.tile.coordinates
+        for x in range(piece_coordinates.x - sighting_distance, piece_coordinates.x + sighting_distance):
+            for y in range(piece_coordinates.y + sighting_distance, piece_coordinates.y + sighting_distance):
+                tile = self.tiles.get((x, y))
+                if tile is None or distance(piece_coordinates, tile.coordinates) > sighting_distance:
+                    continue
+                result.update(tile.pieces)
+        return result
+
+    def get_commands_of_piece(self, piece_id):
+        """Returns the list of ordered commands given to the given piece.
+
+        Note that if the piece did not receive any command in this turn, or is not
+        owned by my country, or does not exist, an empty list is returned.
+        """
+        return [command for command in self._commands if command.piece_id == piece_id]
+
+    def log(self, log_entry):
+        """Logs the given log entry to the main log of this country.
+
+        log_entry is expected to be a string, without a trailing new line character.
+        """
+        self._logger.log(log_entry)
+
+    def get_result(self):
+        return [command.to_dict() for command in self._commands]
 
 
 def move_tank_to_destination(tank, dest):
@@ -42,6 +129,7 @@ def move_tank_to_destination(tank, dest):
 class MyStrategicApi(strategic_api.StrategicApi):
     def __init__(self, *args, **kwargs):
         super(MyStrategicApi, self).__init__(*args, **kwargs)
+        self.context: TurnContext = self.context
         to_remove = set()
         for tank_id, destination in tank_to_coordinate_to_attack.items():
             tank = self.context.my_pieces.get(tank_id)
@@ -244,8 +332,8 @@ class MyStrategicApi(strategic_api.StrategicApi):
                 self.collect_money(builder, builder.money - COST[piece_type])
         # self.context.log("[*] build_piece: return")
 
-    def is_in_board(loc, width, height):
-        return loc.x >= 0 and loc.y >= 0 and loc.x < width and loc.y < height
+    def is_in_board(self, loc: Tuple[int, int]):
+        return loc[0] >= 0 and loc[1] >= 0 and loc[0] < self.get_game_width() and loc[1] < self.get_game_height()
 
     def collect_money(self, builder, amount):
         """Collect a certain amount of money by the given `builder`.
@@ -262,9 +350,13 @@ class MyStrategicApi(strategic_api.StrategicApi):
             # All possible directions, even ones outside the board
             DIRECTIONS_UNFILTERED = [(loc.x + a[0], loc.y + a[1]) for a in [(0, 1), (0, -1), (1, 0), (-1, 0)]]
             # filter
-            DIRECTIONS = [a for a in DIRECTIONS_UNFILTERED if self.is_in_board(a, self.get_game_width(), self.get_game_height())]
+            self.context.log(str(DIRECTIONS_UNFILTERED))
+
+            DIRECTIONS = [a for a in DIRECTIONS_UNFILTERED if self.is_in_board(a)]
             # money for every destinaion
-            MONEY = [self.context.tile[DIRECTIONS[a]].money for a in DIRECTIONS]
+            self.context.log("2")
+
+            MONEY = [self.context.tiles[a].money for a in DIRECTIONS]
             self.context.log("moneys: " + str(MONEY))
 
             best_i = -1
@@ -292,7 +384,7 @@ class MyStrategicApi(strategic_api.StrategicApi):
                 self.context.log("[*] collect_money: return")
                 return
             else:
-                builder.move(dest)
+                builder.move(common_types.Coordinates(dest[0], dest[1]))
         else:
             n_tile = self.context.tiles[(loc.x, loc.y)]
             m = n_tile.money
