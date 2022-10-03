@@ -38,26 +38,29 @@ class MyStrategicApi(strategic_api.StrategicApi):
             return 15
 
     def estimate_tile_danger(self, destination) -> float:
+        """
+        digit is zero if the tile is free.
+                1 if ours
+                2 if enemys
+            
+        the ten's digit is the number of enemy's builders
+        the thousand's digit is the number of enemy's tanks
+        """
+        piece_to_danger = {"builder":10, "tank":1000}
+
         tile = self.context.tiles[(destination.x, destination.y)]
-        if tile.country is None:
-            return 0
+        danger = 0
         if tile.country == self.get_my_country():
-            danger = 0
-            for piece in self.context.all_pieces:
-                if piece.country == self.get_my_country():
-                    if tactical_api.distance(piece.tile.coordinates, destination) == 0:
-                        danger = max(danger, self.get_power(piece))
-            return 0-danger
-        else:
-            danger = 0
-            for piece in self.context.all_pieces:
-                if piece.country != self.get_my_country():
-                    if tactical_api.distance(piece.tile.coordinates, destination) == 0:
-                        danger = max(danger, self.get_power(piece))
-            if danger == 0:
-                pass
-            else:
-                return danger
+            danger +=1
+        elif tile.country != None:
+            danger += 2
+        for piece in self.context.all_pieces:
+            if piece.country != self.get_my_country():
+                if tactical_api.distance(piece.tile.coordinates, destination) == 0:
+                    danger+=piece_to_danger[piece.type]
+        return danger
+
+
 
     def gather_intelligence(self, pieces, destination, radius=2):
         """Get intelligence of the area around the destination, using `pieces`.
@@ -97,6 +100,8 @@ class MyStrategicApi(strategic_api.StrategicApi):
             else:
                 break
             piece.move(new_coordinate)
+
+            
     def build_piece(self, builder, piece_type):
         if piece_type == "airplane":
             if builder.money >= COST[piece_type]:
